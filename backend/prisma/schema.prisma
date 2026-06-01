@@ -1,0 +1,514 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionOrigin {
+  TELEGRAM
+  MANUAL
+  IMPORT
+  RECURRING
+}
+
+enum PaymentMethod {
+  ACCOUNT
+  PIX
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  BOLETO
+  OTHER
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  INVESTMENT
+}
+
+enum CardBrand {
+  VISA
+  MASTERCARD
+  ELO
+  AMEX
+  HIPERCARD
+}
+
+enum CardType {
+  CREDIT
+  DEBIT
+}
+
+enum BillStatus {
+  PAID
+  PENDING
+  OVERDUE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum OrgType {
+  PERSONAL
+  COUPLE
+  BUSINESS
+}
+
+enum AlertLevel {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum TelegramEventKind {
+  EXPENSE
+  INCOME
+  IMAGE
+  AUDIO
+  PDF
+}
+
+enum BudgetPeriod {
+  MONTHLY
+  WEEKLY
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  phone        String?
+  timezone     String   @default("America/Sao_Paulo")
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Telegram Integration
+  telegramUserId     String?   @unique @map("telegram_user_id")
+  telegramChatId     String?   @map("telegram_chat_id")
+  telegramUsername   String?   @map("telegram_username")
+  telegramFirstName  String?   @map("telegram_first_name")
+  telegramLinkedAt   DateTime? @map("telegram_linked_at") @db.Timestamptz
+  telegramLastSeenAt DateTime? @map("telegram_last_seen_at") @db.Timestamptz
+
+  memberships     OrganizationMember[]
+  reminders       Reminder[]
+  auditLogs       AuditLog[]
+  inviteLinks     InviteLink[]
+  emailVerificationCodes EmailVerificationCode[]
+  cardWorkspaceLinks       CardWorkspaceLink[]
+  workspaceCardPreferences WorkspaceCardPreference[]
+  @@map("users")
+}
+
+model EmailVerificationCode {
+  id        String    @id @default(cuid())
+  email     String
+  userId    String?   @map("user_id")
+  codeHash  String    @map("code_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, createdAt])
+  @@index([userId])
+  @@map("email_verification_codes")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  type      OrgType  @default(PERSONAL)
+  initials  String   @default("")
+  createdById String? @map("created_by_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  members               OrganizationMember[]
+  categories            Category[]
+  accounts              Account[]
+  cards                 Card[]
+  transactions          Transaction[]
+  bills                 Bill[]
+  budgets               Budget[]
+  goals                 Goal[]
+  recurringTransactions RecurringTransaction[]
+  smartAlerts           SmartAlert[]
+  telegramEvents        TelegramEvent[]
+  auditLogs             AuditLog[]
+  inviteLinks           InviteLink[]
+  cardWorkspaceLinks       CardWorkspaceLink[]
+  workspaceCardPreferences WorkspaceCardPreference[]
+  @@index([createdById])
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id          String     @id @default(cuid())
+  role        MemberRole @default(MEMBER)
+  userId      String     @map("user_id")
+  orgId       String     @map("org_id")
+  avatarColor String     @default("#3b82f6") @map("avatar_color")
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  recurringTransactions RecurringTransaction[]
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@unique([userId, orgId])
+  @@map("organization_members")
+}
+
+model TelegramLinkToken {
+  id             String    @id @default(cuid())
+  token          String    @unique
+  userId         String    @map("user_id")
+  organizationId String?   @map("organization_id")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz
+  usedAt         DateTime? @map("used_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("telegram_link_tokens")
+}
+
+model InviteLink {
+  id          String     @id @default(cuid())
+  token       String     @unique @default(cuid())
+  orgId       String     @map("org_id")
+  role        MemberRole @default(MEMBER)
+  invitedEmail String?   @map("invited_email")
+  createdById String     @map("created_by_id")
+  expiresAt   DateTime   @map("expires_at") @db.Timestamptz
+  maxUses     Int?       @map("max_uses")
+  usedCount   Int        @default(0) @map("used_count")
+  active      Boolean    @default(true)
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy User         @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@map("invite_links")
+}
+
+model Category {
+  id     String  @id @default(cuid())
+  name   String
+  icon   String  @default("Sparkles")
+  color  String  @default("var(--chart-1)")
+  active Boolean @default(true)
+  orgId  String  @map("org_id")
+
+  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  bills        Bill[]
+  budgets      Budget[]
+  recurringTransactions RecurringTransaction[]
+
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([name, orgId])
+  @@map("categories")
+}
+
+model Account {
+  id      String      @id @default(cuid())
+  name    String
+  bank    String
+  type    AccountType @default(CHECKING)
+  balance Int         @default(0)
+  color   String      @default("#3b82f6")
+  orgId   String      @map("org_id")
+
+  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  recurringTransactions RecurringTransaction[]
+
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("accounts")
+}
+
+model Card {
+  id             String    @id @default(cuid())
+  name           String
+  brand          CardBrand @default(MASTERCARD)
+  cardType       CardType  @default(CREDIT) @map("card_type")
+  last4          String
+  limitInCents   Int       @map("limit_in_cents")
+  usedInCents    Int       @default(0) @map("used_in_cents")
+  invoiceDue     DateTime? @map("invoice_due") @db.Timestamptz
+  invoiceInCents Int       @default(0) @map("invoice_in_cents")
+  color          String    @default("linear-gradient(135deg, #2a2a2a, #111)")
+  orgId          String    @map("org_id")
+
+  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  workspaceLinks CardWorkspaceLink[]
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("cards")
+}
+
+model Bill {
+  id            String     @id @default(cuid())
+  name          String
+  dueDate       DateTime   @map("due_date") @db.Timestamptz
+  amountInCents Int        @map("amount_in_cents")
+  status        BillStatus @default(PENDING)
+  recurring     Boolean    @default(false)
+
+  categoryId String @map("category_id")
+  orgId      String @map("org_id")
+
+  category Category     @relation(fields: [categoryId], references: [id])
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([orgId, status])
+  @@map("bills")
+}
+
+enum TransactionStatus {
+  CONFIRMED
+  PENDING
+  CANCELLED
+}
+
+model Transaction {
+  id            String            @id @default(cuid())
+  description   String
+  amountInCents Int               @map("amount_in_cents")
+  type          TransactionType
+  origin        TransactionOrigin @default(MANUAL)
+  paymentMethod PaymentMethod?     @map("payment_method")
+  status        TransactionStatus @default(CONFIRMED)
+  confidence    Float?
+  note          String?
+  date          DateTime          @default(now()) @db.Timestamptz
+  deletedAt     DateTime?         @map("deleted_at") @db.Timestamptz
+
+  // Installment fields
+  installments        Int       @default(1)
+  currentInstallment  Int       @default(1) @map("current_installment")
+  installmentGroupId  String?   @map("installment_group_id")
+
+  // Receipt / NFC-e grouping (links split-payment transactions to same receipt)
+  receiptGroupId      String?   @map("receipt_group_id")
+
+  categoryId String  @map("category_id")
+  accountId  String? @map("account_id")
+  cardId     String? @map("card_id")
+  memberId   String  @map("member_id")
+  orgId      String  @map("org_id")
+
+  category Category            @relation(fields: [categoryId], references: [id])
+  account  Account?            @relation(fields: [accountId], references: [id])
+  card     Card?               @relation(fields: [cardId], references: [id])
+  member   OrganizationMember  @relation(fields: [memberId], references: [id])
+  org      Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([orgId, date])
+  @@index([orgId, type])
+  @@index([categoryId])
+  @@index([deletedAt])
+  @@index([cardId])
+  @@index([receiptGroupId])
+  @@map("transactions")
+}
+
+model Budget {
+  id           String       @id @default(cuid())
+  limitInCents Int          @map("limit_in_cents")
+  period       BudgetPeriod @default(MONTHLY)
+  threshold80Alerted  Boolean @default(false) @map("threshold_80_alerted")
+  threshold100Alerted Boolean @default(false) @map("threshold_100_alerted")
+
+  categoryId   String @map("category_id")
+  orgId        String @map("org_id")
+
+  category Category     @relation(fields: [categoryId], references: [id])
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([categoryId, orgId])
+  @@map("budgets")
+}
+
+model Goal {
+  id             String    @id @default(cuid())
+  name           String
+  targetInCents  Int       @map("target_in_cents")
+  currentInCents Int       @default(0) @map("current_in_cents")
+  deadline       DateTime? @db.Timestamptz
+  icon           String    @default("Target")
+  color          String    @default("#3b82f6")
+
+  orgId String @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("goals")
+}
+
+model RecurringTransaction {
+  id            String          @id @default(cuid())
+  description   String
+  amountInCents Int             @map("amount_in_cents")
+  type          TransactionType
+  frequency     String          @default("MONTHLY") // MONTHLY, WEEKLY
+  dayOfMonth    Int?            @map("day_of_month")
+  dayOfWeek     Int?            @map("day_of_week")
+  lastOccurrence DateTime?       @map("last_occurrence") @db.Timestamptz
+  nextOccurrence DateTime        @map("next_occurrence") @db.Timestamptz
+  active        Boolean         @default(true)
+
+  categoryId String @map("category_id")
+  accountId  String @map("account_id")
+  memberId   String @map("member_id")
+  orgId      String @map("org_id")
+
+  category     Category           @relation(fields: [categoryId], references: [id])
+  account      Account            @relation(fields: [accountId], references: [id])
+  member       OrganizationMember @relation(fields: [memberId], references: [id])
+  org          Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("recurring_transactions")
+}
+
+model Reminder {
+  id          String   @id @default(cuid())
+  message     String
+  scheduledAt DateTime @map("scheduled_at") @db.Timestamptz
+  sent        Boolean  @default(false)
+  userId      String   @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@index([scheduledAt, sent])
+  @@map("reminders")
+}
+
+model SmartAlert {
+  id      String     @id @default(cuid())
+  level   AlertLevel @default(INFO)
+  title   String
+  message String
+  active  Boolean    @default(true)
+  orgId   String     @map("org_id")
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@map("smart_alerts")
+}
+
+model TelegramEvent {
+  id            String            @id @default(cuid())
+  chatId        String            @map("chat_id")
+  rawText       String?           @map("raw_text")
+  processedData Json?             @map("processed_data")
+  kind          TelegramEventKind
+  amount        Int?
+  orgId         String            @map("org_id")
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@index([orgId, createdAt])
+  @@map("telegram_events")
+}
+
+model AIProcessingLog {
+  id               String @id @default(cuid())
+  input            String @db.Text
+  output           String @db.Text
+  model            String @default("gemini-2.0-flash")
+  tokensUsed       Int    @default(0) @map("tokens_used")
+  confidence       Float  @default(0)
+  processingTimeMs Int    @default(0) @map("processing_time_ms")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@map("ai_processing_logs")
+}
+
+model AuditLog {
+  id       String  @id @default(cuid())
+  action   String
+  entity   String
+  entityId String? @map("entity_id")
+  metadata Json?
+  userId   String  @map("user_id")
+  orgId    String  @map("org_id")
+  user User         @relation(fields: [userId], references: [id])
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  @@index([orgId, createdAt])
+  @@map("audit_logs")
+}
+
+// Vínculo individual de um cartão pessoal a um workspace, por usuário.
+// linked = true  -> vínculo explícito (cartão aparece no workspace)
+// linked = false -> exclusão explícita (override do auto-link)
+model CardWorkspaceLink {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  cardId    String   @map("card_id")
+  orgId     String   @map("org_id")
+  linked    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card Card         @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId, orgId])
+  @@index([userId, orgId])
+  @@map("card_workspace_links")
+}
+
+// Preferência de auto-vínculo de cartões pessoais por (usuário, workspace).
+model WorkspaceCardPreference {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  orgId     String   @map("org_id")
+  autoLinkPersonalCards Boolean @default(false) @map("auto_link_personal_cards")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@map("workspace_card_preferences")
+}

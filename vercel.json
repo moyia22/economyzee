@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build:spa",
+  "outputDirectory": "dist-spa",
+  "framework": null,
+  "env": {
+    "VITE_API_URL": "https://improvise-climatic-frequency.ngrok-free.dev",
+    "VITE_SUPABASE_URL": "https://jaelwfbcxwjzjagdrcwr.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphZWx3ZmJjeHdqemphZ2RyY3dyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NDk0NTcsImV4cCI6MjA5MzEyNTQ1N30.F3I5b9hR07w4xdps9YxBoei63xHBDXhBVW3BCJ2lbRg"
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

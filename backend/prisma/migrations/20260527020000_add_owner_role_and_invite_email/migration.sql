@@ -1,0 +1,4 @@
+ALTER TYPE "MemberRole" ADD VALUE IF NOT EXISTS 'OWNER';
+
+ALTER TABLE "invite_links"
+ADD COLUMN IF NOT EXISTS "invited_email" TEXT;

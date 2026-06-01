@@ -1,0 +1,69 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { ReceiptOcrService } from './receipt-ocr.service';
+import { AiParserService } from '../financial-parser/ai-parser.service';
+import { ConfigService } from '@nestjs/config';
+
+describe('ReceiptOcrService - Logic Extraction', () => {
+  let service: ReceiptOcrService;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ReceiptOcrService,
+        {
+          provide: AiParserService,
+          useValue: { parse: jest.fn() }
+        },
+        ConfigService
+      ],
+    }).compile();
+
+    service = module.get<ReceiptOcrService>(ReceiptOcrService);
+  });
+
+  it('should extract the correct total based on keywords despite other large values', () => {
+    const text = `
+    ADISER COMÉRCIO DE ALIMENTOS LTDA
+    Whopper R$ 14,00
+    Carne Whopper R$ 10,90
+    Refrigerante R$ 16,90
+    Batata Suprema R$ 11,00
+    Batata Grande R$ 17,00
+    Refrigerante R$ 19,90
+    Total a pagar R$ 92,20
+    `;
+    
+    // Test private method by ignoring TS error
+    const amountRes = (service as any).extractAmount(text);
+    expect(amountRes.amount).toBe(9220);
+    expect(amountRes.isFallback).toBe(false);
+  });
+
+  it('should extract merchant name correctly ignoring URLs and CNPJ', () => {
+    const text = `
+    sat.sef.sc.gov.br
+    CNPJ 00.000.000/0001-00
+    BURGER KING
+    ADISER COMÉRCIO DE ALIMENTOS LTDA
+    `;
+
+    const merchant = (service as any).extractMerchantName(text);
+    expect(merchant).toContain('ADISER COMÉRCIO DE ALIMENTOS LTDA');
+  });
+
+  it('should extract items correctly and ignore system lines', () => {
+    const text = `
+    Whopper R$ 14,00
+    Carne Whopper R$ 10,90
+    TOTAL R$ 24,90
+    CARTAO R$ 24,90
+    `;
+
+    const items = (service as any).extractReceiptItems(text);
+    expect(items.length).toBe(2);
+    expect(items[0].name).toContain('Whopper');
+    expect(items[0].total).toBe(14);
+    expect(items[1].name).toContain('Carne Whopper');
+    expect(items[1].total).toBe(10.9);
+  });
+});

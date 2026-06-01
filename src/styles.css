@@ -1,0 +1,281 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * EconomyZee — Fintech Dark Premium design system.
+ * All colors in oklch. Default theme is dark.
+ */
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Default = dark fintech */
+:root {
+  --radius: 0.75rem;
+
+  --background: oklch(0.16 0.01 260);
+  --foreground: oklch(0.97 0.005 260);
+
+  --card: oklch(0.205 0.012 260);
+  --card-foreground: oklch(0.97 0.005 260);
+
+  --popover: oklch(0.21 0.012 260);
+  --popover-foreground: oklch(0.97 0.005 260);
+
+  --primary: oklch(0.78 0.18 152);            /* fintech green #22c55e tuned */
+  --primary-foreground: oklch(0.16 0.02 260);
+
+  --secondary: oklch(0.26 0.014 260);
+  --secondary-foreground: oklch(0.97 0.005 260);
+
+  --muted: oklch(0.24 0.012 260);
+  --muted-foreground: oklch(0.68 0.02 260);
+
+  --accent: oklch(0.28 0.018 260);
+  --accent-foreground: oklch(0.97 0.005 260);
+
+  --destructive: oklch(0.65 0.22 22);
+  --destructive-foreground: oklch(0.98 0.005 260);
+
+  --success: oklch(0.78 0.18 152);
+  --success-foreground: oklch(0.16 0.02 260);
+
+  --warning: oklch(0.82 0.16 80);
+  --warning-foreground: oklch(0.18 0.02 80);
+
+  --info: oklch(0.72 0.14 235);
+  --info-foreground: oklch(0.16 0.02 260);
+
+  --border: oklch(0.28 0.012 260 / 70%);
+  --input: oklch(0.28 0.012 260);
+  --ring: oklch(0.78 0.18 152);
+
+  --chart-1: oklch(0.78 0.18 152);  /* green */
+  --chart-2: oklch(0.72 0.14 235);  /* blue */
+  --chart-3: oklch(0.82 0.16 80);   /* amber */
+  --chart-4: oklch(0.7 0.2 320);    /* magenta */
+  --chart-5: oklch(0.7 0.16 25);    /* coral */
+
+  --sidebar: oklch(0.135 0.01 260);
+  --sidebar-foreground: oklch(0.92 0.005 260);
+  --sidebar-primary: oklch(0.78 0.18 152);
+  --sidebar-primary-foreground: oklch(0.16 0.02 260);
+  --sidebar-accent: oklch(0.22 0.012 260);
+  --sidebar-accent-foreground: oklch(0.97 0.005 260);
+  --sidebar-border: oklch(0.24 0.012 260);
+  --sidebar-ring: oklch(0.78 0.18 152);
+
+  /* Effects */
+  --shadow-card: 0 1px 0 0 oklch(1 0 0 / 4%) inset, 0 8px 24px -12px oklch(0 0 0 / 50%);
+  --shadow-glow: 0 0 0 1px oklch(0.78 0.18 152 / 30%), 0 0 28px -4px oklch(0.78 0.18 152 / 35%);
+  --gradient-surface: linear-gradient(180deg, oklch(0.22 0.012 260) 0%, oklch(0.18 0.01 260) 100%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    background-color: oklch(0.78 0.18 152 / 30%);
+  }
+
+  /* Subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.3 0.01 260);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.38 0.01 260);
+  }
+}
+
+@layer utilities {
+  .surface-card {
+    background: var(--gradient-surface);
+    box-shadow: var(--shadow-card);
+  }
+  .glow-ring {
+    box-shadow: var(--shadow-glow);
+  }
+  .pulse-dot {
+    position: relative;
+  }
+  .pulse-dot::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 9999px;
+    background: var(--primary);
+    opacity: 0.35;
+    animation: pulse-ring 1.8s ease-out infinite;
+  }
+
+  /* === Premium Animations === */
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out both;
+  }
+  .animate-fade-in {
+    animation: fade-in 0.4s ease-out both;
+  }
+  .animate-slide-in-right {
+    animation: slide-in-right 0.4s ease-out both;
+  }
+  .animate-shimmer {
+    animation: shimmer 1.8s ease-in-out infinite;
+    background-size: 200% 100%;
+  }
+  .animate-scale-in {
+    animation: scale-in 0.3s ease-out both;
+  }
+
+  /* Stagger delays */
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
+  .stagger-6 { animation-delay: 0.3s; }
+
+  /* Glassmorphism */
+  .glass {
+    background: oklch(0.18 0.01 260 / 60%);
+    backdrop-filter: blur(16px) saturate(1.6);
+    border: 1px solid oklch(1 0 0 / 6%);
+  }
+  .glass-tooltip {
+    background: oklch(0.15 0.012 260 / 85%);
+    backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid oklch(1 0 0 / 8%);
+    box-shadow: 0 8px 32px oklch(0 0 0 / 40%), 0 0 0 1px oklch(1 0 0 / 4%) inset;
+  }
+
+  /* Card hover lift */
+  .card-hover {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .card-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-card), 0 4px 16px oklch(0 0 0 / 25%);
+    border-color: oklch(0.35 0.015 260);
+  }
+
+  /* Glow borders */
+  .glow-success {
+    box-shadow: 0 0 0 1px oklch(0.78 0.18 152 / 20%), 0 0 12px -2px oklch(0.78 0.18 152 / 15%);
+  }
+  .glow-destructive {
+    box-shadow: 0 0 0 1px oklch(0.65 0.22 22 / 20%), 0 0 12px -2px oklch(0.65 0.22 22 / 15%);
+  }
+
+  @keyframes pulse-ring {
+    0% { transform: scale(0.7); opacity: 0.5; }
+    80%, 100% { transform: scale(1.4); opacity: 0; }
+  }
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  /* Anel pulsando atrás do checkmark (tela de invite aceito) */
+  .animate-ping-slow {
+    animation: ping-slow 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  @keyframes ping-slow {
+    0%   { transform: scale(1);   opacity: 0.45; }
+    80%  { transform: scale(1.9); opacity: 0;    }
+    100% { transform: scale(1.9); opacity: 0;    }
+  }
+
+  /* Confetti caindo (tela de invite aceito) */
+  .animate-confetti {
+    animation: confetti 1.6s ease-out forwards;
+  }
+  @keyframes confetti {
+    0%   { transform: translateY(0)    rotate(0);     opacity: 0; }
+    10%  { opacity: 1; }
+    100% { transform: translateY(420px) rotate(540deg); opacity: 0; }
+  }
+}
