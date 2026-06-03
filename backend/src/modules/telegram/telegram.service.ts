@@ -1808,6 +1808,14 @@ export class TelegramService implements OnModuleInit {
       });
 
       this.logger.log('[Supabase] Fim: Sucesso');
+
+      // Aprendizado: se a categoria final difere da sugerida pelo parser,
+      // o usuário corrigiu -> memoriza token -> categoria. Best-effort.
+      const original = (draft as any).originalCategory;
+      if (original !== undefined && draft.category && draft.category !== original) {
+        await this.categoryMemory.learn(draft.userId, draft.rawText, draft.category);
+      }
+
       const wsLabel = targetMember.orgId !== member.orgId ? ` no workspace *${(targetMember as any).org?.name || 'selecionado'}*` : '';
       await ctx.reply(`✅ Lançamento realizado com sucesso${wsLabel}!`, { parse_mode: 'Markdown' });
       this.eventEmitter.emit('sync.trigger', { type: 'transaction_created', orgId: targetMember.orgId });
