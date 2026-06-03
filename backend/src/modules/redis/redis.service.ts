@@ -44,6 +44,9 @@ export interface TransactionDraft {
   // Workspace selection (Telegram): se preenchido, sobrescreve o destino padrão (pessoal)
   targetOrgId?: string;
   targetMemberId?: string;
+  // Categoria sugerida pelo parser ANTES da memória/correção — usada para detectar
+  // se o usuário corrigiu a categoria (gatilho de aprendizado).
+  originalCategory?: string;
 }
 
 @Injectable()
