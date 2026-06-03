@@ -19,6 +19,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
 import { SupabaseSafeService } from '../supabase/supabase-safe.service';
+import { CategoryMemoryService } from '../category-memory/category-memory.service';
 import { fromZonedTime, formatBRT } from '../../common/utils/date.utils';
 
 type RequestedCardType = 'CREDIT' | 'DEBIT';
@@ -39,6 +40,7 @@ export class TelegramService implements OnModuleInit {
     private summary: FinancialSummaryService,
     private insights: FinancialInsightsService,
     private redis: RedisService,
+    private categoryMemory: CategoryMemoryService,
     private speech: SpeechToTextService,
     private ocr: ReceiptOcrService,
     private eventEmitter: EventEmitter2,
@@ -1009,6 +1011,17 @@ export class TelegramService implements OnModuleInit {
   }
 
   private async handleParseResult(draft: any, ctx: Context, chatId: string, messageId?: number) {
+    // Memória de categorização: na primeira passagem por este draft, registra a
+    // categoria sugerida pelo parser e aplica a memória do usuário (se houver).
+    // Em re-renderizações (após correção) originalCategory já está setado -> não reaplica,
+    // preservando a correção manual recém-feita.
+    if (draft.originalCategory === undefined) {
+      draft.originalCategory = draft.category || 'Outros';
+      if (draft.userId) {
+        await this.categoryMemory.applyTo(draft.userId, draft);
+      }
+    }
+
     // If missing fields, ask conversationally
     if (draft.missingFields && draft.missingFields.length > 0) {
       const missing = draft.missingFields[0];

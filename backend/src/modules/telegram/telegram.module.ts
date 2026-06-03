@@ -11,6 +11,7 @@ import { RedisModule } from '../redis/redis.module';
 import { ReceiptsModule } from '../receipts/receipts.module';
 import { ReportsModule } from '../reports/reports.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { CategoryMemoryModule } from '../category-memory/category-memory.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     ReceiptsModule,
     ReportsModule,
     AnalyticsModule,
+    CategoryMemoryModule,
     BullModule.registerQueue({
       name: 'telegram-message-processing',
     }),
