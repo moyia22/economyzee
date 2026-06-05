@@ -1,1 +1,0 @@
-import{z as t}from"./index-DwoBRc3j.js";async function e(){return t.get("/accounts")}async function o(c){return t.post("/accounts",c)}async function a(c){return t.delete(`/accounts/${c}`)}export{o as c,a as d,e as g};

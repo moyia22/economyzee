@@ -1,1 +1,0 @@
-import{z as a}from"./index-DwoBRc3j.js";async function n(){return await a.get("/categories")}async function o(t){return await a.post("/categories",t)}async function c(t,e){return await a.patch(`/categories/${t}`,e)}async function i(t){return await a.delete(`/categories/${t}`)}export{o as c,i as d,n as g,c as u};
