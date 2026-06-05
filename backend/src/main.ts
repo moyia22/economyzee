@@ -25,7 +25,6 @@ const ALLOWED_HEADERS = [
   'Content-Type',
   'Authorization',
   'x-organization-id',
-  'ngrok-skip-browser-warning',
 ];
 
 function parseOriginList(value?: string): string[] {
@@ -106,7 +105,7 @@ async function bootstrap() {
     }),
   );
 
-  app.setGlobalPrefix('api', { exclude: ['integrations/telegram/webhook'] });
+  app.setGlobalPrefix('api');
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('EconomyZee API')

@@ -1,28 +1,27 @@
 @echo off
-title EconomyZee Dev
-
-echo ========================================
-echo   EconomyZee - Iniciando ambiente DEV
-echo ========================================
+echo ============================================
+echo   EconomyZee - Iniciando Backend (Dev)
+echo ============================================
 echo.
 
-REM 1. Inicia o ngrok com o dominio estatico
-echo [1/2] Iniciando ngrok...
-start "ngrok" cmd /k "ngrok http --domain=improvise-climatic-frequency.ngrok-free.dev 3333"
+REM 1. Inicia Docker (PostgreSQL + Redis)
+echo [1/2] Iniciando Docker...
+start "Docker" cmd /k "docker-compose up -d"
+timeout /t 8 /nobreak > nul
 
-timeout /t 3 /nobreak >nul
-
-REM 2. Inicia o backend NestJS
-echo [2/2] Iniciando backend NestJS (porta 3333)...
-start "Backend NestJS" cmd /k "cd /d %~dp0backend && npm run start:dev"
+REM 2. Inicia Backend NestJS
+echo [2/2] Iniciando Backend NestJS...
+start "Backend" cmd /k "cd backend && npm run start:dev"
 
 echo.
-echo ========================================
-echo  Servicos iniciados!
-echo  Backend:  http://localhost:3333
-echo  ngrok:    https://improvise-climatic-frequency.ngrok-free.dev
+echo ============================================
+echo   TUDO RODANDO!
+echo ============================================
+echo.
+echo  Frontend: http://localhost:5173
+echo  Backend:  http://localhost:3333/api
 echo  Swagger:  http://localhost:3333/docs
-echo  Vercel:   https://economyzee-smart-finance-hub-main.vercel.app
-echo ========================================
+echo.
+echo  Para producao, consulte: deploy/deploy-checklist.md
 echo.
 pause

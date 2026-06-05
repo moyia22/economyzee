@@ -22,25 +22,9 @@ export function useRealTimeSync() {
 
       if (!token || cancelled) return;
 
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-      const isNgrokBackend = API_URL.includes('ngrok-free.dev') || API_URL.includes('ngrok.app');
+      const API_URL = import.meta.env.VITE_API_URL || '/api';
 
-      if (isNgrokBackend) {
-        console.info('[SSE] Usando polling para backend via ngrok; EventSource nao permite headers customizados.');
-        const polling = window.setInterval(() => {
-          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-          queryClient.invalidateQueries({ queryKey: ['transactions'] });
-          queryClient.invalidateQueries({ queryKey: ['dashboard', 'telegram-feed'] });
-          queryClient.invalidateQueries({ queryKey: ['dashboard', 'smart-alerts'] });
-          queryClient.invalidateQueries({ queryKey: ['workspaces'] });
-          queryClient.invalidateQueries({ queryKey: ['workspace-members'] });
-        }, 30_000);
-
-        cleanup = () => window.clearInterval(polling);
-        return;
-      }
-
-      eventSource = new EventSource(`${API_URL}/api/sync/events?token=${token}`);
+      eventSource = new EventSource(`${API_URL}/sync/events?token=${token}`);
 
       eventSource.onmessage = (event) => {
         try {

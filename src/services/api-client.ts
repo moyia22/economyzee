@@ -6,9 +6,8 @@
 
 import { supabase } from '../lib/supabase';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-const API_PREFIX = '/api';
-const NGROK_SKIP_HEADER = 'ngrok-skip-browser-warning';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+const API_PREFIX = '';
 
 let accessToken: string | null = null;
 
@@ -71,7 +70,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
-    [NGROK_SKIP_HEADER]: 'true',
     ...(orgId ? { 'x-organization-id': orgId } : {}),
     ...((options.headers as Record<string, string>) || {}),
   };
@@ -99,7 +97,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 async function publicRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    [NGROK_SKIP_HEADER]: 'true',
     ...((options.headers as Record<string, string>) || {}),
   };
 
