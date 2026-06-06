@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { PaymentMethod, Prisma, TransactionOrigin, TransactionType } from '@prisma/client';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
@@ -8,7 +8,7 @@ import {
   getBRTStartOfWeek,
   getBRTStartOfMonth,
 } from '../../common/utils/date.utils';
-import { effectiveLinked, getPersonalOrgId } from '../cards/card-links.util';
+import { effectiveLinked } from '../cards/card-links.util';
 
 type TransactionInput = {
   description: string;
@@ -31,6 +31,8 @@ const CARD_PAYMENT_METHODS: PaymentMethod[] = [
   PaymentMethod.CREDIT_CARD,
   PaymentMethod.DEBIT_CARD,
 ];
+
+type DbClient = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class TransactionsService {
@@ -78,75 +80,78 @@ export class TransactionsService {
   }
 
   async create(orgId: string, data: TransactionInput) {
-    const member = await this.resolveMember(orgId, data);
-    const type = this.normalizeTransactionType(data.type);
-    const payment = await this.resolvePayment(orgId, data);
-    const installments = Math.max(1, Number(data.installments || 1));
-    const totalAmount = Number(data.amountInCents || 0);
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      const member = await this.resolveMember(orgId, data, tx);
+      const type = this.normalizeTransactionType(data.type);
+      const payment = await this.resolvePayment(orgId, data, tx);
+      const installments = Math.max(1, Number(data.installments || 1));
+      const totalAmount = Number(data.amountInCents || 0);
 
-    if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-      throw new BadRequestException('Valor da transacao deve ser maior que zero.');
-    }
+      if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+        throw new BadRequestException('Valor da transacao deve ser maior que zero.');
+      }
 
-    const installmentAmount = Math.round(totalAmount / installments);
-    const groupId = installments > 1 ? `inst_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : undefined;
-    const txsToCreate: Prisma.TransactionCreateInput[] = [];
-    const baseDate = data.date ? new Date(data.date) : new Date();
+      const installmentAmount = Math.round(totalAmount / installments);
+      const groupId = installments > 1 ? `inst_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : undefined;
+      const txsToCreate: Prisma.TransactionCreateInput[] = [];
+      const baseDate = data.date ? new Date(data.date) : new Date();
 
-    for (let i = 0; i < installments; i++) {
-      const installmentDate = new Date(baseDate);
-      installmentDate.setMonth(installmentDate.getMonth() + i);
+      for (let i = 0; i < installments; i++) {
+        const installmentDate = new Date(baseDate);
+        installmentDate.setMonth(installmentDate.getMonth() + i);
 
-      const amount = i === installments - 1 && installments > 1
-        ? totalAmount - installmentAmount * (installments - 1)
-        : installmentAmount;
+        const amount = i === installments - 1 && installments > 1
+          ? totalAmount - installmentAmount * (installments - 1)
+          : installmentAmount;
 
-      txsToCreate.push({
-        description: installments > 1
-          ? `${data.description} (${i + 1}/${installments})`
-          : data.description,
-        amountInCents: amount,
-        type,
-        origin: (data.origin as TransactionOrigin) || TransactionOrigin.MANUAL,
-        paymentMethod: payment.paymentMethod,
-        category: { connect: { id: data.categoryId } },
-        account: payment.accountId ? { connect: { id: payment.accountId } } : undefined,
-        card: payment.cardId ? { connect: { id: payment.cardId } } : undefined,
-        member: { connect: { id: member.id } },
-        org: { connect: { id: orgId } },
-        confidence: data.confidence,
-        date: installmentDate,
-        note: data.note,
-        installments,
-        currentInstallment: i + 1,
-        installmentGroupId: groupId,
-      });
-    }
+        txsToCreate.push({
+          description: installments > 1
+            ? `${data.description} (${i + 1}/${installments})`
+            : data.description,
+          amountInCents: amount,
+          type,
+          origin: (data.origin as TransactionOrigin) || TransactionOrigin.MANUAL,
+          paymentMethod: payment.paymentMethod,
+          category: { connect: { id: data.categoryId } },
+          account: payment.accountId ? { connect: { id: payment.accountId } } : undefined,
+          card: payment.cardId ? { connect: { id: payment.cardId } } : undefined,
+          member: { connect: { id: member.id } },
+          org: { connect: { id: orgId } },
+          confidence: data.confidence,
+          date: installmentDate,
+          note: data.note,
+          installments,
+          currentInstallment: i + 1,
+          installmentGroupId: groupId,
+        });
+      }
 
-    const createdTxs = await Promise.all(
-      txsToCreate.map((txData) =>
-        this.prisma.transaction.create({
-          data: txData,
-          include: { category: true, account: true, card: true, member: true },
-        }),
-      ),
-    );
+      const createdTxs = await Promise.all(
+        txsToCreate.map((txData) =>
+          tx.transaction.create({
+            data: txData,
+            include: { category: true, account: true, card: true, member: true },
+          }),
+        ),
+      );
 
-    await this.applyAccountEffects(createdTxs, 1);
+      await this.applyAccountEffects(createdTxs, 1, tx);
 
-    if (payment.cardId && type === TransactionType.EXPENSE) {
-      await this.updateCardUsage(payment.cardId);
-    }
+      if (payment.cardId && type === TransactionType.EXPENSE) {
+        await this.updateCardUsage(payment.cardId, tx);
+      }
 
-    const transaction = createdTxs[0];
+      return createdTxs[0];
+    });
+
     this.realtime.sendToUser(transaction.member.userId, 'transaction_created', transaction);
 
     return transaction;
   }
 
-  private async resolveMember(orgId: string, data: TransactionInput) {
+  private async resolveMember(orgId: string, data: TransactionInput, db: DbClient = this.prisma) {
     if (data.memberId) {
-      const member = await this.prisma.organizationMember.findFirst({
+      const member = await db.organizationMember.findFirst({
         where: { id: data.memberId, orgId },
       });
       if (member) return member;
@@ -154,7 +159,7 @@ export class TransactionsService {
 
     const userId = data.userId || data.memberId;
     if (userId) {
-      const member = await this.prisma.organizationMember.findUnique({
+      const member = await db.organizationMember.findUnique({
         where: { userId_orgId: { userId, orgId } },
       });
       if (member) return member;
@@ -170,19 +175,19 @@ export class TransactionsService {
     throw new BadRequestException('Tipo de transacao invalido.');
   }
 
-  private async resolvePayment(orgId: string, data: TransactionInput) {
+  private async resolvePayment(orgId: string, data: TransactionInput, db: DbClient = this.prisma) {
     const cardId = data.cardId || undefined;
     const accountId = cardId ? undefined : data.accountId || undefined;
 
     const [card, account] = await Promise.all([
-      cardId ? this.prisma.card.findFirst({ where: { id: cardId, orgId } }) : null,
-      accountId ? this.prisma.account.findFirst({ where: { id: accountId, orgId } }) : null,
+      cardId ? db.card.findFirst({ where: { id: cardId, orgId } }) : null,
+      accountId ? db.account.findFirst({ where: { id: accountId, orgId } }) : null,
     ]);
 
     // Cartão do próprio workspace OU cartão pessoal vinculado a este workspace.
     let resolvedCard = card;
     if (cardId && !resolvedCard) {
-      resolvedCard = await this.resolveLinkedPersonalCard(orgId, data.userId, cardId);
+      resolvedCard = await this.resolveLinkedPersonalCard(orgId, data.userId, cardId, db);
     }
 
     if (cardId && !resolvedCard) {
@@ -235,22 +240,27 @@ export class TransactionsService {
    * Retorna o cartão pessoal do usuário se ele estiver efetivamente vinculado
    * a este workspace; caso contrário, null.
    */
-  private async resolveLinkedPersonalCard(orgId: string, userId: string | undefined, cardId: string) {
+  private async resolveLinkedPersonalCard(orgId: string, userId: string | undefined, cardId: string, db: DbClient = this.prisma) {
     if (!userId) return null;
 
-    const personalOrgId = await getPersonalOrgId(this.prisma, userId);
+    const personalMembership = await db.organizationMember.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      select: { orgId: true },
+    });
+    const personalOrgId = personalMembership?.orgId ?? null;
     if (!personalOrgId || personalOrgId === orgId) return null;
 
-    const card = await this.prisma.card.findFirst({ where: { id: cardId, orgId: personalOrgId } });
+    const card = await db.card.findFirst({ where: { id: cardId, orgId: personalOrgId } });
     if (!card) return null;
 
-    const link = await this.prisma.cardWorkspaceLink.findUnique({
+    const link = await db.cardWorkspaceLink.findUnique({
       where: { userId_cardId_orgId: { userId, cardId, orgId } },
     });
 
     let autoLink = false;
     if (!link) {
-      const pref = await this.prisma.workspaceCardPreference.findUnique({
+      const pref = await db.workspaceCardPreference.findUnique({
         where: { userId_orgId: { userId, orgId } },
       });
       autoLink = pref?.autoLinkPersonalCards ?? false;
@@ -315,6 +325,7 @@ export class TransactionsService {
   private async applyAccountEffects(
     transactions: Array<{ accountId: string | null; type: TransactionType; amountInCents: number }>,
     direction: 1 | -1,
+    db: DbClient = this.prisma,
   ) {
     for (const transaction of transactions) {
       if (!transaction.accountId) continue;
@@ -323,7 +334,7 @@ export class TransactionsService {
           ? transaction.amountInCents
           : -transaction.amountInCents;
 
-      await this.prisma.account.update({
+      await db.account.update({
         where: { id: transaction.accountId },
         data: { balance: { increment: signedAmount * direction } },
       });
@@ -331,105 +342,126 @@ export class TransactionsService {
   }
 
   /** Recalculate card usedInCents from all active transactions */
-  async updateCardUsage(cardId: string) {
-    const now = new Date();
-    const result = await this.prisma.transaction.aggregate({
-      where: {
-        cardId,
-        deletedAt: null,
-        type: { in: ['EXPENSE'] as any },
-        date: {
-          gte: new Date(now.getFullYear(), now.getMonth(), 1),
-          lte: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59),
+  async updateCardUsage(cardId: string, db?: DbClient) {
+    const updateUsage = async (client: DbClient) => {
+      const now = new Date();
+      const result = await client.transaction.aggregate({
+        where: {
+          cardId,
+          deletedAt: null,
+          type: { in: ['EXPENSE'] as any },
+          date: {
+            gte: new Date(now.getFullYear(), now.getMonth(), 1),
+            lte: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59),
+          },
         },
-      },
-      _sum: { amountInCents: true },
-    });
-    await this.prisma.card.update({
-      where: { id: cardId },
-      data: { usedInCents: result._sum.amountInCents || 0 },
-    });
+        _sum: { amountInCents: true },
+      });
+      await client.card.update({
+        where: { id: cardId },
+        data: { usedInCents: result._sum.amountInCents || 0 },
+      });
+    };
+
+    if (db) {
+      await updateUsage(db);
+      return;
+    }
+
+    await this.prisma.$transaction((tx) => updateUsage(tx));
   }
 
-  async update(id: string, data: Partial<TransactionInput> & { amount?: number }) {
-    const previous = await this.prisma.transaction.findUnique({
-      where: { id },
-      include: { member: true },
-    });
+  async update(id: string, orgId: string, data: Partial<TransactionInput> & { amount?: number }) {
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.transaction.findFirst({
+        where: { id, orgId },
+        include: { member: true },
+      });
 
-    if (!previous) {
-      throw new BadRequestException('Transacao nao encontrada.');
-    }
+      if (!previous) {
+        throw new NotFoundException('Transacao nao encontrada.');
+      }
 
-    const type = data.type ? this.normalizeTransactionType(data.type) : previous.type;
-    const amountInCents =
-      typeof data.amountInCents === 'number'
-        ? data.amountInCents
-        : typeof data.amount === 'number'
-          ? Math.round(data.amount * 100)
-          : previous.amountInCents;
+      const type = data.type ? this.normalizeTransactionType(data.type) : previous.type;
+      const amountInCents =
+        typeof data.amountInCents === 'number'
+          ? data.amountInCents
+          : typeof data.amount === 'number'
+            ? Math.round(data.amount * 100)
+            : previous.amountInCents;
 
-    const payment = await this.resolvePayment(previous.orgId, {
-      description: data.description || previous.description,
-      amountInCents,
-      type,
-      categoryId: data.categoryId || previous.categoryId,
-      accountId: data.accountId !== undefined ? data.accountId : previous.accountId,
-      cardId: data.cardId !== undefined ? data.cardId : previous.cardId,
-      memberId: previous.memberId,
-      userId: data.userId,
-      paymentMethod: data.paymentMethod !== undefined ? data.paymentMethod : previous.paymentMethod,
-      note: data.note !== undefined ? data.note || undefined : previous.note || undefined,
-    });
-
-    await this.applyAccountEffects([previous], -1);
-
-    const transaction = await this.prisma.transaction.update({
-      where: { id },
-      data: {
-        description: data.description,
+      const payment = await this.resolvePayment(previous.orgId, {
+        description: data.description || previous.description,
         amountInCents,
         type,
-        categoryId: data.categoryId,
-        accountId: payment.accountId || null,
-        cardId: payment.cardId || null,
-        paymentMethod: payment.paymentMethod,
-        note: data.note,
-        date: data.date ? new Date(data.date) : undefined,
-      },
-      include: { category: true, account: true, card: true, member: true },
+        categoryId: data.categoryId || previous.categoryId,
+        accountId: data.accountId !== undefined ? data.accountId : previous.accountId,
+        cardId: data.cardId !== undefined ? data.cardId : previous.cardId,
+        memberId: previous.memberId,
+        userId: data.userId,
+        paymentMethod: data.paymentMethod !== undefined ? data.paymentMethod : previous.paymentMethod,
+        note: data.note !== undefined ? data.note || undefined : previous.note || undefined,
+      }, tx);
+
+      await this.applyAccountEffects([previous], -1, tx);
+
+      const updatedTransaction = await tx.transaction.update({
+        where: { id },
+        data: {
+          description: data.description,
+          amountInCents,
+          type,
+          categoryId: data.categoryId,
+          accountId: payment.accountId || null,
+          cardId: payment.cardId || null,
+          paymentMethod: payment.paymentMethod,
+          note: data.note,
+          date: data.date ? new Date(data.date) : undefined,
+        },
+        include: { category: true, account: true, card: true, member: true },
+      });
+
+      await this.applyAccountEffects([updatedTransaction], 1, tx);
+
+      for (const cardId of Array.from(new Set([previous.cardId, updatedTransaction.cardId].filter(Boolean) as string[]))) {
+        await this.updateCardUsage(cardId, tx);
+      }
+
+      return updatedTransaction;
     });
-
-    await this.applyAccountEffects([transaction], 1);
-
-    for (const cardId of Array.from(new Set([previous.cardId, transaction.cardId].filter(Boolean) as string[]))) {
-      await this.updateCardUsage(cardId);
-    }
 
     this.realtime.sendToUser(transaction.member.userId, 'transaction_updated', transaction);
     return transaction;
   }
 
-  async delete(id: string) {
-    const previous = await this.prisma.transaction.findUnique({ where: { id } });
-    const transaction = await this.prisma.transaction.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-      include: { member: true }
-    });
+  async delete(id: string, orgId: string) {
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.transaction.findFirst({ where: { id, orgId } });
+      if (!previous) {
+        throw new NotFoundException('Transacao nao encontrada.');
+      }
 
-    if (previous && !previous.deletedAt) {
-      await this.applyAccountEffects([previous], -1);
-      if (previous.cardId) await this.updateCardUsage(previous.cardId);
-    }
+      const deletedTransaction = await tx.transaction.update({
+        where: { id: previous.id },
+        data: { deletedAt: new Date() },
+        include: { member: true }
+      });
+
+      if (previous && !previous.deletedAt) {
+        await this.applyAccountEffects([previous], -1, tx);
+        if (previous.cardId) await this.updateCardUsage(previous.cardId, tx);
+      }
+
+      return deletedTransaction;
+    });
 
     this.realtime.sendToUser(transaction.member.userId, 'transaction_deleted', { id });
     return transaction;
   }
 
-  findById(id: string) {
-    return this.prisma.transaction.findUnique({
-      where: { id },
+  findById(id: string, orgId: string) {
+    return this.prisma.transaction.findFirst({
+      where: { id, orgId },
       include: { category: true, account: true, card: true }
     });
   }
@@ -478,51 +510,71 @@ export class TransactionsService {
     });
   }
 
-  async restore(id: string) {
-    const previous = await this.prisma.transaction.findUnique({ where: { id } });
-    const transaction = await this.prisma.transaction.update({
-      where: { id },
-      data: { deletedAt: null },
-      include: { member: true }
+  async restore(id: string, orgId: string) {
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.transaction.findFirst({ where: { id, orgId } });
+      if (!previous) {
+        throw new NotFoundException('Transacao nao encontrada.');
+      }
+
+      const restoredTransaction = await tx.transaction.update({
+        where: { id: previous.id },
+        data: { deletedAt: null },
+        include: { member: true }
+      });
+      if (previous?.deletedAt) {
+        await this.applyAccountEffects([restoredTransaction], 1, tx);
+        if (restoredTransaction.cardId) await this.updateCardUsage(restoredTransaction.cardId, tx);
+      }
+
+      return restoredTransaction;
     });
-    if (previous?.deletedAt) {
-      await this.applyAccountEffects([transaction], 1);
-      if (transaction.cardId) await this.updateCardUsage(transaction.cardId);
-    }
+
     this.realtime.sendToUser(transaction.member.userId, 'transaction_updated', transaction);
     return transaction;
   }
 
   async restoreAll(orgId: string) {
-    const transactions = await this.prisma.transaction.findMany({
-      where: { orgId, deletedAt: { not: null } },
-      select: { accountId: true, type: true, amountInCents: true, cardId: true },
+    return this.prisma.$transaction(async (tx) => {
+      const transactions = await tx.transaction.findMany({
+        where: { orgId, deletedAt: { not: null } },
+        select: { accountId: true, type: true, amountInCents: true, cardId: true },
+      });
+      const result = await tx.transaction.updateMany({
+        where: { orgId, deletedAt: { not: null } },
+        data: { deletedAt: null },
+      });
+      await this.applyAccountEffects(transactions, 1, tx);
+      for (const cardId of Array.from(new Set(transactions.map((t) => t.cardId).filter(Boolean) as string[]))) {
+        await this.updateCardUsage(cardId, tx);
+      }
+      return { count: result.count };
     });
-    const result = await this.prisma.transaction.updateMany({
-      where: { orgId, deletedAt: { not: null } },
-      data: { deletedAt: null },
-    });
-    await this.applyAccountEffects(transactions, 1);
-    for (const cardId of Array.from(new Set(transactions.map((t) => t.cardId).filter(Boolean) as string[]))) {
-      await this.updateCardUsage(cardId);
-    }
-    return { count: result.count };
   }
 
-  async deletePermanent(id: string, userId: string) {
-    const transaction = await this.prisma.transaction.delete({
-      where: { id },
-      include: { member: true }
-    });
-
-    await this.prisma.auditLog.create({
-      data: {
-        action: 'PERMANENT_DELETE',
-        entity: 'Transaction',
-        entityId: id,
-        userId,
-        orgId: transaction.orgId,
+  async deletePermanent(id: string, orgId: string, userId: string) {
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      const previous = await tx.transaction.findFirst({ where: { id, orgId } });
+      if (!previous) {
+        throw new NotFoundException('Transacao nao encontrada.');
       }
+
+      const deletedTransaction = await tx.transaction.delete({
+        where: { id: previous.id },
+        include: { member: true }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: 'PERMANENT_DELETE',
+          entity: 'Transaction',
+          entityId: id,
+          userId,
+          orgId: deletedTransaction.orgId,
+        }
+      });
+
+      return deletedTransaction;
     });
 
     this.realtime.sendToUser(transaction.member.userId, 'transaction_deleted', { id, permanent: true });
@@ -556,7 +608,8 @@ export class TransactionsService {
     );
 
     // Captura IDs de cartões afetados ANTES do soft-delete para recalcular usedInCents
-    const affected = await this.prisma.transaction.findMany({
+    const resetResult = await this.prisma.$transaction(async (tx) => {
+    const affected = await tx.transaction.findMany({
       where,
       select: { id: true, cardId: true, accountId: true, type: true, amountInCents: true },
     });
@@ -567,12 +620,12 @@ export class TransactionsService {
       return { success: true, count: 0, period };
     }
 
-    const result = await this.prisma.transaction.updateMany({
+    const result = await tx.transaction.updateMany({
       where,
       data: { deletedAt: new Date() },
     });
 
-    await this.applyAccountEffects(affected, -1);
+    await this.applyAccountEffects(affected, -1, tx);
 
     this.logger.log(
       `[Reset] ${result.count} transações movidas para a lixeira (orgId=${orgId}, period=${period})`
@@ -584,16 +637,17 @@ export class TransactionsService {
     );
     for (const cardId of affectedCardIds) {
       try {
-        await this.updateCardUsage(cardId);
+        await this.updateCardUsage(cardId, tx);
       } catch (err: any) {
         this.logger.warn(`[Reset] Falha ao recalcular cartão ${cardId}: ${err.message}`);
+        throw err;
       }
     }
     if (affectedCardIds.length > 0) {
       this.logger.log(`[Reset] Recalculado usedInCents de ${affectedCardIds.length} cartão(ões)`);
     }
 
-    await this.prisma.auditLog.create({
+    await tx.auditLog.create({
       data: {
         action: `RESET_${period.toUpperCase()}`,
         entity: 'Transaction',
@@ -603,13 +657,18 @@ export class TransactionsService {
       },
     });
 
+      return { success: true, count, period };
+    });
+
     // Notifica o frontend (websocket) para invalidar dashboard
-    try {
-      this.realtime.sendToUser(userId, 'transactions_reset', { period, count });
-    } catch {
-      /* ignore broadcast errors */
+    if (resetResult.count > 0) {
+      try {
+        this.realtime.sendToUser(userId, 'transactions_reset', { period, count: resetResult.count });
+      } catch {
+        /* ignore broadcast errors */
+      }
     }
 
-    return { success: true, count, period };
+    return resetResult;
   }
 }

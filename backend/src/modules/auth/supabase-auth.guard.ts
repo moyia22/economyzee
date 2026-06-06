@@ -67,9 +67,6 @@ export class SupabaseAuthGuard implements CanActivate {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       return authHeader.split(' ')[1];
     }
-    if (request.query.token) {
-      return request.query.token as string;
-    }
     return '';
   }
 

@@ -2,10 +2,11 @@ import { Controller, Get, Post, Patch, Put, Delete, Param, Body, UseGuards, Requ
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { CardsService } from './cards.service';
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
+import { Roles, RolesGuard, WRITE_ROLES } from '../../common';
 
 @ApiTags('Cards')
 @ApiBearerAuth()
-@UseGuards(SupabaseAuthGuard)
+@UseGuards(SupabaseAuthGuard, RolesGuard)
 @Controller('cards')
 export class CardsController {
   constructor(private svc: CardsService) {}
@@ -20,27 +21,32 @@ export class CardsController {
   }
 
   @Put('links/auto')
+  @Roles(...WRITE_ROLES)
   setAutoLink(@Request() req: any, @Body() body: { enabled?: boolean }) {
     return this.svc.setAutoLink(req.user.orgId, req.user.id, !!body?.enabled);
   }
 
   @Put('links/:cardId')
+  @Roles(...WRITE_ROLES)
   setCardLink(@Request() req: any, @Param('cardId') cardId: string, @Body() body: { linked?: boolean }) {
     return this.svc.setCardLink(req.user.orgId, req.user.id, cardId, !!body?.linked);
   }
   // ---------------------------------------------------------------------------------------
 
   @Post()
+  @Roles(...WRITE_ROLES)
   create(@Request() req: any, @Body() body: any) {
     return this.svc.create(req.user.orgId, body, req.user.role);
   }
 
   @Patch(':id')
+  @Roles(...WRITE_ROLES)
   update(@Request() req: any, @Param('id') id: string, @Body() body: any) {
     return this.svc.update(id, body, req.user.orgId, req.user.role);
   }
 
   @Delete(':id')
+  @Roles(...WRITE_ROLES)
   delete(@Request() req: any, @Param('id') id: string) {
     return this.svc.delete(id, req.user.orgId, req.user.role);
   }

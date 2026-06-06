@@ -2,10 +2,11 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Re
 import { SupabaseAuthGuard } from '../auth/supabase-auth.guard';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
+import { Roles, RolesGuard, WRITE_ROLES } from '../../common';
 
 @ApiTags('Transactions')
 @ApiBearerAuth()
-@UseGuards(SupabaseAuthGuard)
+@UseGuards(SupabaseAuthGuard, RolesGuard)
 @Controller('transactions')
 export class TransactionsController {
   constructor(private svc: TransactionsService) {}
@@ -25,13 +26,15 @@ export class TransactionsController {
   }
 
   @Post()
+  @Roles(...WRITE_ROLES)
   create(@Request() req: any, @Body() body: any) {
     return this.svc.create(req.user.orgId, { ...body, userId: req.user.sub });
   }
 
   @Patch(':id')
+  @Roles(...WRITE_ROLES)
   update(@Request() req: any, @Param('id') id: string, @Body() body: any) {
-    return this.svc.update(id, { ...body, userId: req.user.sub });
+    return this.svc.update(id, req.user.orgId, { ...body, userId: req.user.sub });
   }
 
   @Get('trash')
@@ -40,27 +43,32 @@ export class TransactionsController {
   }
 
   @Post('trash/restore-all')
+  @Roles(...WRITE_ROLES)
   restoreAllTrash(@Request() req: any) {
     return this.svc.restoreAll(req.user.orgId);
   }
 
   @Post('reset/:period')
+  @Roles(...WRITE_ROLES)
   resetTransactions(@Request() req: any, @Param('period') period: 'day' | 'week' | 'month' | 'all') {
     return this.svc.resetTransactions(req.user.orgId, req.user.sub, period);
   }
 
   @Post(':id/restore')
-  restore(@Param('id') id: string) {
-    return this.svc.restore(id);
+  @Roles(...WRITE_ROLES)
+  restore(@Request() req: any, @Param('id') id: string) {
+    return this.svc.restore(id, req.user.orgId);
   }
 
   @Delete(':id/permanent')
+  @Roles(...WRITE_ROLES)
   deletePermanent(@Request() req: any, @Param('id') id: string) {
-    return this.svc.deletePermanent(id, req.user.sub);
+    return this.svc.deletePermanent(id, req.user.orgId, req.user.sub);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.svc.delete(id);
+  @Roles(...WRITE_ROLES)
+  delete(@Request() req: any, @Param('id') id: string) {
+    return this.svc.delete(id, req.user.orgId);
   }
 }

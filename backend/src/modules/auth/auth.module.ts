@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { SupabaseAuthGuard } from './supabase-auth.guard';
 import { SupabaseModule } from '../supabase/supabase.module';
 import { EmailModule } from '../email/email.module';
+import { RolesGuard } from '../../common';
 
 @Global()
 @Module({
@@ -27,7 +28,7 @@ import { EmailModule } from '../email/email.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, SupabaseAuthGuard],
-  exports: [AuthService, JwtModule, SupabaseAuthGuard, SupabaseModule],
+  providers: [AuthService, JwtStrategy, SupabaseAuthGuard, RolesGuard],
+  exports: [AuthService, JwtModule, SupabaseAuthGuard, RolesGuard, SupabaseModule],
 })
 export class AuthModule {}

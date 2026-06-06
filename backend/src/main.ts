@@ -44,6 +44,11 @@ function getAllowedOrigins(config: ConfigService): string[] {
   return Array.from(new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins]));
 }
 
+function getSafeRequestUrl(req: any): string {
+  const rawUrl = req.originalUrl || req.url || '';
+  return rawUrl.split('?')[0] || rawUrl;
+}
+
 async function bootstrap() {
   console.log('=== BACKEND STARTING ===');
   const app = await NestFactory.create(AppModule);
@@ -81,7 +86,7 @@ async function bootstrap() {
 
   app.use((req, _res, next) => {
     logger.log(
-      `[HTTP] ${req.method} ${req.originalUrl} | origin=${req.headers.origin || 'none'}`,
+      `[HTTP] ${req.method} ${getSafeRequestUrl(req)} | origin=${req.headers.origin || 'none'}`,
     );
     next();
   });
