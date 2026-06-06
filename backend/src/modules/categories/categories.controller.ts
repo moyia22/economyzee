@@ -34,5 +34,5 @@ export class CategoriesController {
 
   @Delete(':id')
   @Roles(...WRITE_ROLES)
-  delete(@Param('id') id: string) { return this.svc.delete(id); }
+  delete(@Param('id') id: string, @Request() req: any) { return this.svc.delete(id, req.user.orgId); }
 }

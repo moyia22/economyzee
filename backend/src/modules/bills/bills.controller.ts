@@ -20,13 +20,13 @@ export class BillsController {
 
   @Post(':id/mark-paid')
   @Roles(...WRITE_ROLES)
-  markPaid(@Param('id') id: string) { return this.svc.markPaid(id); }
+  markPaid(@Request() req: any, @Param('id') id: string) { return this.svc.markPaid(id, req.user.orgId); }
 
   @Patch(':id')
   @Roles(...WRITE_ROLES)
-  update(@Param('id') id: string, @Body() body: any) { return this.svc.update(id, body); }
+  update(@Request() req: any, @Param('id') id: string, @Body() body: any) { return this.svc.update(id, req.user.orgId, body); }
 
   @Delete(':id')
   @Roles(...WRITE_ROLES)
-  delete(@Param('id') id: string) { return this.svc.delete(id); }
+  delete(@Request() req: any, @Param('id') id: string) { return this.svc.delete(id, req.user.orgId); }
 }

@@ -1,10 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { DEFAULT_CATEGORIES } from '../../common/default-categories';
 
 @Injectable()
 export class CategoriesService {
   constructor(private prisma: PrismaService) {}
+
+  private async requireCategoryInOrg(id: string, orgId: string) {
+    const category = await this.prisma.category.findFirst({ where: { id, orgId } });
+    if (!category) {
+      throw new NotFoundException('Categoria nao encontrada.');
+    }
+    return category;
+  }
 
   async findAll(orgId: string) {
     const categories = await this.prisma.category.findMany({ where: { orgId }, orderBy: { name: 'asc' } });
@@ -25,11 +33,13 @@ export class CategoriesService {
     return this.prisma.category.findMany({ where: { orgId }, orderBy: { name: 'asc' } });
   }
 
-  update(id: string, orgId: string, data: { name?: string; icon?: string; color?: string; active?: boolean }) {
+  async update(id: string, orgId: string, data: { name?: string; icon?: string; color?: string; active?: boolean }) {
+    await this.requireCategoryInOrg(id, orgId);
     return this.prisma.category.update({ where: { id }, data });
   }
 
-  delete(id: string) {
+  async delete(id: string, orgId: string) {
+    await this.requireCategoryInOrg(id, orgId);
     return this.prisma.category.delete({ where: { id } });
   }
 }

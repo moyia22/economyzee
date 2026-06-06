@@ -174,6 +174,9 @@ test('create wraps installments and balance updates in one Prisma transaction', 
     organizationMember: {
       findUnique: async () => ({ id: 'member-1', userId: 'user-1' }),
     },
+    category: {
+      findFirst: async () => ({ id: 'cat-1', orgId: 'org-current' }),
+    },
     account: {
       findFirst: async () => ({ id: 'account-1' }),
       update: async (args: any) => {
@@ -230,6 +233,9 @@ test('create resolves linked card and recalculates card usage inside the transac
     organizationMember: {
       findUnique: async () => ({ id: 'member-1', userId: 'user-1' }),
       findFirst: async () => ({ orgId: 'org-personal' }),
+    },
+    category: {
+      findFirst: async () => ({ id: 'cat-1', orgId: 'org-current' }),
     },
     card: {
       findFirst: async (args: any) => {

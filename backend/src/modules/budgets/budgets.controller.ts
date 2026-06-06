@@ -20,9 +20,9 @@ export class BudgetsController {
 
   @Patch(':id')
   @Roles(...WRITE_ROLES)
-  update(@Param('id') id: string, @Body() body: any) { return this.svc.update(id, body); }
+  update(@Request() req: any, @Param('id') id: string, @Body() body: any) { return this.svc.update(id, req.user.orgId, body); }
 
   @Delete(':id')
   @Roles(...WRITE_ROLES)
-  delete(@Param('id') id: string) { return this.svc.delete(id); }
+  delete(@Request() req: any, @Param('id') id: string) { return this.svc.delete(id, req.user.orgId); }
 }

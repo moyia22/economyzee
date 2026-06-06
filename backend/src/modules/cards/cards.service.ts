@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { getPersonalOrgId, resolveLinkedCardIds } from './card-links.util';
+import { effectiveLinked, getPersonalOrgId, resolveLinkedCardIds } from './card-links.util';
 import { CARD_WRITE_FORBIDDEN_MESSAGE, canWriteCards, decideCardWrite } from './card-access.util';
 
 @Injectable()
@@ -137,13 +137,47 @@ export class CardsService {
     return this.prisma.card.delete({ where: { id } });
   }
 
-  async getInvoices(cardId: string) {
+  async getInvoices(cardId: string, orgId: string, userId: string) {
+    await this.authorizeCardRead(cardId, orgId, userId);
+
     const transactions = await this.prisma.transaction.findMany({
       where: { cardId, deletedAt: null },
       orderBy: { date: 'desc' },
       include: { category: true },
     });
     return transactions;
+  }
+
+  /**
+   * Autoriza LEITURA de um cartão no contexto da org ativa: cartão da própria org
+   * OU cartão pessoal do usuário efetivamente vinculado a este workspace.
+   * Caso contrário, 404 genérico para não vazar dados de outra org (IDOR).
+   */
+  private async authorizeCardRead(cardId: string, orgId: string, userId: string) {
+    const card = await this.prisma.card.findUnique({ where: { id: cardId } });
+    if (!card) {
+      throw new NotFoundException('Cartão não encontrado.');
+    }
+    if (card.orgId === orgId) {
+      return card;
+    }
+
+    const personalOrgId = await getPersonalOrgId(this.prisma, userId);
+    if (personalOrgId && card.orgId === personalOrgId) {
+      const [link, pref] = await Promise.all([
+        this.prisma.cardWorkspaceLink.findUnique({
+          where: { userId_cardId_orgId: { userId, cardId, orgId } },
+        }),
+        this.prisma.workspaceCardPreference.findUnique({
+          where: { userId_orgId: { userId, orgId } },
+        }),
+      ]);
+      if (effectiveLinked(link?.linked, pref?.autoLinkPersonalCards ?? false)) {
+        return card;
+      }
+    }
+
+    throw new NotFoundException('Cartão não encontrado.');
   }
 
   async getLinkState(orgId: string, userId: string) {

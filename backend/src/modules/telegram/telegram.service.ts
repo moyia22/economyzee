@@ -1674,37 +1674,58 @@ export class TelegramService implements OnModuleInit {
            await this.bot!.api.sendMessage(chatId, successMsg);
         }
       } else {
-        // Separate transactions
-        for (let i = 0; i < nfce.paymentDetails.length; i++) {
-          const payment = nfce.paymentDetails[i];
-          const cardId = resolvedCards[i] || null;
+        // Separate transactions — atômico: criação + efeito no saldo + uso do cartão
+        // numa única $transaction, para evitar inconsistência de saldo se algo falhar.
+        const txType = draft.type === 'expense' ? 'EXPENSE' : 'INCOME';
+        await this.prisma.$transaction(async (db) => {
+          const affectedCardIds = new Set<string>();
 
-          this.logger.log(`[Split] Salvando pagamento ${i + 1}/${nfce.paymentDetails.length}: ${payment.label} R$${payment.amount} cardId=${cardId}`);
+          for (let i = 0; i < nfce.paymentDetails.length; i++) {
+            const payment = nfce.paymentDetails[i];
+            const cardId = resolvedCards[i] || null;
+            const accountId = cardId ? null : defaultAccountId;
+            const amountInCents = Math.round(payment.amount * 100);
 
-          await this.prisma.transaction.create({
-            data: {
-              description: `${draft.description} - ${payment.label}`,
-              amountInCents: Math.round(payment.amount * 100),
-              type: draft.type === 'expense' ? 'EXPENSE' : 'INCOME',
-              categoryId: matchedCat!.id,
-              accountId: cardId ? null : defaultAccountId,
-              cardId: cardId || null,
-              memberId: saveMemberId,
-              orgId: member.orgId,
-              origin: 'TELEGRAM',
-              confidence: draft.confidence,
-              date: draft.date ? new Date(draft.date) : new Date(),
-              note: `Parte de compra dividida (${nfce.paymentDetails.length} pagamentos)`,
-              installments: payment.installments || 1,
-              receiptGroupId,
-            },
-          });
-          
-          // Sync card usage manually since we bypassed transactions.create
-          if (cardId && draft.type === 'expense') {
-              await this.transactions.updateCardUsage(cardId);
+            this.logger.log(`[Split] Salvando pagamento ${i + 1}/${nfce.paymentDetails.length}: ${payment.label} R$${payment.amount} cardId=${cardId}`);
+
+            await db.transaction.create({
+              data: {
+                description: `${draft.description} - ${payment.label}`,
+                amountInCents,
+                type: txType,
+                categoryId: matchedCat!.id,
+                accountId,
+                cardId: cardId || null,
+                memberId: saveMemberId,
+                orgId: member.orgId,
+                origin: 'TELEGRAM',
+                confidence: draft.confidence,
+                date: draft.date ? new Date(draft.date) : new Date(),
+                note: `Parte de compra dividida (${nfce.paymentDetails.length} pagamentos)`,
+                installments: payment.installments || 1,
+                receiptGroupId,
+              },
+            });
+
+            // Efeito no saldo da conta (mesma regra de transactions.service)
+            if (accountId) {
+              const signedAmount = txType === 'INCOME' ? amountInCents : -amountInCents;
+              await db.account.update({
+                where: { id: accountId },
+                data: { balance: { increment: signedAmount } },
+              });
+            }
+
+            if (cardId && txType === 'EXPENSE') {
+              affectedCardIds.add(cardId);
+            }
           }
-        }
+
+          // Recalcula o uso de cada cartão impactado dentro da mesma transação.
+          for (const cardId of affectedCardIds) {
+            await this.transactions.updateCardUsage(cardId, db);
+          }
+        });
 
         const successMsg = `✅ ${nfce.paymentDetails.length} transações salvas, vinculadas à mesma compra!`;
         if (ctx.callbackQuery?.message?.message_id) {

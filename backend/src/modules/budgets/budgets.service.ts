@@ -1,10 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { getBRTStartOfMonth, getBRTStartOfWeek } from '../../common/utils/date.utils';
 
 @Injectable()
 export class BudgetsService {
   constructor(private prisma: PrismaService) {}
+
+  private async requireBudgetInOrg(id: string, orgId: string) {
+    const budget = await this.prisma.budget.findFirst({ where: { id, orgId } });
+    if (!budget) {
+      throw new NotFoundException('Orcamento nao encontrado.');
+    }
+    return budget;
+  }
 
   async findAll(orgId: string) {
     const budgets = await this.prisma.budget.findMany({
@@ -38,11 +46,13 @@ export class BudgetsService {
     });
   }
 
-  update(id: string, data: { limitInCents?: number; period?: 'MONTHLY' | 'WEEKLY' }) {
+  async update(id: string, orgId: string, data: { limitInCents?: number; period?: 'MONTHLY' | 'WEEKLY' }) {
+    await this.requireBudgetInOrg(id, orgId);
     return this.prisma.budget.update({ where: { id }, data });
   }
 
-  delete(id: string) {
+  async delete(id: string, orgId: string) {
+    await this.requireBudgetInOrg(id, orgId);
     return this.prisma.budget.delete({ where: { id } });
   }
 }

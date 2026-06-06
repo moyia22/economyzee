@@ -52,5 +52,7 @@ export class CardsController {
   }
 
   @Get(':id/invoices')
-  getInvoices(@Param('id') id: string) { return this.svc.getInvoices(id); }
+  getInvoices(@Request() req: any, @Param('id') id: string) {
+    return this.svc.getInvoices(id, req.user.orgId, req.user.id);
+  }
 }

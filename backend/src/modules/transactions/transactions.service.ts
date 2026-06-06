@@ -83,6 +83,7 @@ export class TransactionsService {
     const transaction = await this.prisma.$transaction(async (tx) => {
       const member = await this.resolveMember(orgId, data, tx);
       const type = this.normalizeTransactionType(data.type);
+      await this.requireCategoryInOrg(orgId, data.categoryId, tx);
       const payment = await this.resolvePayment(orgId, data, tx);
       const installments = Math.max(1, Number(data.installments || 1));
       const totalAmount = Number(data.amountInCents || 0);
@@ -147,6 +148,14 @@ export class TransactionsService {
     this.realtime.sendToUser(transaction.member.userId, 'transaction_created', transaction);
 
     return transaction;
+  }
+
+  private async requireCategoryInOrg(orgId: string, categoryId: string, db: DbClient = this.prisma) {
+    const category = await db.category.findFirst({ where: { id: categoryId, orgId } });
+    if (!category) {
+      throw new BadRequestException('Categoria nao encontrada neste workspace.');
+    }
+    return category;
   }
 
   private async resolveMember(orgId: string, data: TransactionInput, db: DbClient = this.prisma) {
@@ -389,6 +398,10 @@ export class TransactionsService {
           : typeof data.amount === 'number'
             ? Math.round(data.amount * 100)
             : previous.amountInCents;
+
+      if (data.categoryId && data.categoryId !== previous.categoryId) {
+        await this.requireCategoryInOrg(previous.orgId, data.categoryId, tx);
+      }
 
       const payment = await this.resolvePayment(previous.orgId, {
         description: data.description || previous.description,
