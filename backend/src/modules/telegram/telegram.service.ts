@@ -21,6 +21,7 @@ import axios from 'axios';
 import { SupabaseSafeService } from '../supabase/supabase-safe.service';
 import { CategoryMemoryService } from '../category-memory/category-memory.service';
 import { fromZonedTime, formatBRT } from '../../common/utils/date.utils';
+import { canRegisterWebhook, shouldAcceptWebhook } from './telegram-webhook.util';
 
 type RequestedCardType = 'CREDIT' | 'DEBIT';
 
@@ -98,12 +99,22 @@ export class TelegramService implements OnModuleInit {
       const webhookUrl = this.config.get('TELEGRAM_WEBHOOK_URL');
       const secretToken = this.config.get('WEBHOOK_SECRET');
 
-      if (nodeEnv === 'production' && webhookUrl) {
+      const isProduction = nodeEnv === 'production';
+
+      if (isProduction && webhookUrl) {
+        // Fail-closed: em produção, sem WEBHOOK_SECRET o webhook NÃO é registrado.
+        if (!canRegisterWebhook({ isProduction, expectedSecret: secretToken })) {
+          this.logger.error(
+            '[Telegram] WEBHOOK_SECRET ausente em produção — webhook NÃO registrado (fail-closed). Configure WEBHOOK_SECRET para ativar o bot.',
+          );
+          return;
+        }
+
         this.logger.log(`🌐 Setting Telegram webhook to: ${webhookUrl}`);
         await this.bot.api.setWebhook(webhookUrl, {
           secret_token: secretToken,
         });
-      } else if (nodeEnv !== 'production') {
+      } else if (!isProduction) {
         this.bot.start({ onStart: () => this.logger.log('Bot polling started') });
       }
     } catch (err) {
@@ -1927,8 +1938,14 @@ export class TelegramService implements OnModuleInit {
 
   async handleWebhook(update: any, secretToken?: string) {
     if (!this.bot) return;
-    const expectedSecret = this.config.get('WEBHOOK_SECRET');
-    if (expectedSecret && secretToken !== expectedSecret) return;
+    const expectedSecret = this.config.get<string>('WEBHOOK_SECRET');
+    const isProduction = this.config.get('NODE_ENV') === 'production';
+
+    if (!shouldAcceptWebhook({ isProduction, expectedSecret, providedSecret: secretToken })) {
+      this.logger.warn('[Telegram] Webhook rejeitado (fail-closed): secret ausente ou inválido');
+      return;
+    }
+
     await this.bot.handleUpdate(update);
   }
 

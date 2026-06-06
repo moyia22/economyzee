@@ -9,11 +9,13 @@ import { CardsController } from './cards/cards.controller';
 import { CategoriesController } from './categories/categories.controller';
 import { DashboardController } from './dashboard/dashboard.controller';
 import { TransactionsController } from './transactions/transactions.controller';
+import { RecurringTransactionsController } from './recurring-transactions/recurring-transactions.controller';
 
 const expectedWriteRoles = [...WRITE_ROLES];
 
 const protectedWriteMethods = [
   [TransactionsController, ['create', 'update', 'restoreAllTrash', 'resetTransactions', 'restore', 'deletePermanent', 'delete']],
+  [RecurringTransactionsController, ['create', 'update', 'delete']],
   [CategoriesController, ['create', 'restoreDefaults', 'update', 'delete']],
   [AccountsController, ['create', 'update', 'delete']],
   [BudgetsController, ['create', 'update', 'delete']],
@@ -24,6 +26,7 @@ const protectedWriteMethods = [
 
 const readOnlyMethods = [
   [TransactionsController, ['findAll', 'getTrash']],
+  [RecurringTransactionsController, ['findAll']],
   [CategoriesController, ['findAll']],
   [AccountsController, ['findAll']],
   [BudgetsController, ['findAll']],

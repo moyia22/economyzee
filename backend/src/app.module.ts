@@ -11,6 +11,7 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
 import { CardsModule } from './modules/cards/cards.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
+import { RecurringTransactionsModule } from './modules/recurring-transactions/recurring-transactions.module';
 import { BillsModule } from './modules/bills/bills.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
@@ -67,6 +68,7 @@ import { PerformanceInterceptor } from './interceptors/performance.interceptor';
     AccountsModule,
     CardsModule,
     TransactionsModule,
+    RecurringTransactionsModule,
     BillsModule,
     BudgetsModule,
     AnalyticsModule,
